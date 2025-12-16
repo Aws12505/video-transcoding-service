@@ -9,10 +9,7 @@ services:
     ports:
       - "26958:80"
     volumes:
-      # DEV: live code updates
       - ./:/var/www/html
-      # Persist uploads/transcodes/logs
-      - transcoding_storage:/var/www/html/storage
     restart: unless-stopped
 
   transcoding_queue:
@@ -23,10 +20,6 @@ services:
     command: sh -lc "php artisan queue:work --queue=transcoding --tries=1 --timeout=7200 --sleep=3"
     volumes:
       - ./:/var/www/html
-      - transcoding_storage:/var/www/html/storage
     restart: unless-stopped
     depends_on:
       - transcoding_api
-
-volumes:
-  transcoding_storage:
