@@ -22,7 +22,7 @@ class TranscodeVideo implements ShouldQueue
     public $tries = 1;
 
     public function __construct(
-        public TranscodeJob $transcodeJob, 
+        public TranscodeJob $transcodeJob,
         public string $videoUrl
     ) {
         $this->onQueue('transcoding');
@@ -35,10 +35,17 @@ class TranscodeVideo implements ShouldQueue
         try {
             $uniqueId = $this->transcodeJob->getUniqueIdentifier();
             
-            // Download original
+            // Download original - relative path for storage/app
             $tempInput = "temp/{$uniqueId}_original.mp4";
             Log::info("Starting download for {$uniqueId}");
             $this->downloadVideo($tempInput);
+            
+            // Verify file exists
+            if (!Storage::disk('local')->exists($tempInput)) {
+                throw new \Exception("Downloaded file not found at: {$tempInput}");
+            }
+            
+            Log::info("File confirmed at: " . Storage::disk('local')->path($tempInput));
             
             // Get quality settings
             $qualitySettings = config('transcoding.quality_settings');
@@ -56,12 +63,6 @@ class TranscodeVideo implements ShouldQueue
                 $settings = $qualitySettings[$quality];
                 $outputPath = "transcoded/{$this->transcodeJob->project_key}/{$this->transcodeJob->video_id}/{$quality}.mp4";
 
-                // Create output directory
-                $outputDir = storage_path("app/transcoded/{$this->transcodeJob->project_key}/{$this->transcodeJob->video_id}");
-                if (!is_dir($outputDir)) {
-                    mkdir($outputDir, 0755, true);
-                }
-
                 // FFmpeg transcode
                 $format = new X264();
                 $format->setKiloBitrate((int) rtrim($settings['bitrate'], 'k'));
@@ -77,6 +78,8 @@ class TranscodeVideo implements ShouldQueue
 
                 $outputPaths[$quality] = $outputPath;
                 $downloadUrls[$quality] = url("/api/download/{$this->transcodeJob->project_key}/{$this->transcodeJob->video_id}/{$quality}");
+                
+                Log::info("Completed {$quality} transcoding");
             }
 
             // Cleanup temp file
@@ -116,20 +119,24 @@ class TranscodeVideo implements ShouldQueue
         }
 
         $stream = $response->toPsrResponse()->getBody();
-        $localPath = storage_path("app/{$outputPath}");
         
-        $directory = dirname($localPath);
-        if (!is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
-
-        $handle = fopen($localPath, 'w');
+        // Create temp file and write stream to it
+        $tempFile = tmpfile();
+        $metaData = stream_get_meta_data($tempFile);
+        $tempPath = $metaData['uri'];
         
+        // Write stream to temp file
         while (!$stream->eof()) {
-            fwrite($handle, $stream->read(1024 * 1024)); // 1MB chunks
+            fwrite($tempFile, $stream->read(1024 * 1024)); // 1MB chunks
         }
         
-        fclose($handle);
+        // Rewind and put to storage
+        rewind($tempFile);
+        Storage::disk('local')->put($outputPath, $tempFile);
+        
+        fclose($tempFile);
+        
+        Log::info("Downloaded video to: {$outputPath}");
     }
 
     private function sendWebhook(array $downloadUrls): void
