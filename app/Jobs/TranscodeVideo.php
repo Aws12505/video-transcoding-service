@@ -22,7 +22,7 @@ class TranscodeVideo implements ShouldQueue
     public $tries = 1;
 
     public function __construct(
-        public TranscodeJob $job,
+        public TranscodeJob $transcodeJob,  // Changed from $job
         public string $videoUrl
     ) {
         $this->onQueue('transcoding');
@@ -30,10 +30,10 @@ class TranscodeVideo implements ShouldQueue
 
     public function handle(): void
     {
-        $this->job->update(['status' => 'processing']);
+        $this->transcodeJob->update(['status' => 'processing']);
 
         try {
-            $uniqueId = $this->job->getUniqueIdentifier();
+            $uniqueId = $this->transcodeJob->getUniqueIdentifier();
             
             // Download original
             $tempInput = "temp/{$uniqueId}_original.mp4";
@@ -46,7 +46,7 @@ class TranscodeVideo implements ShouldQueue
             $downloadUrls = [];
 
             // Transcode each quality
-            foreach ($this->job->qualities_requested as $quality) {
+            foreach ($this->transcodeJob->qualities_requested as $quality) {
                 if (!isset($qualitySettings[$quality])) {
                     continue;
                 }
@@ -54,10 +54,10 @@ class TranscodeVideo implements ShouldQueue
                 Log::info("Transcoding {$uniqueId} to {$quality}");
                 
                 $settings = $qualitySettings[$quality];
-                $outputPath = "transcoded/{$this->job->project_key}/{$this->job->video_id}/{$quality}.mp4";
+                $outputPath = "transcoded/{$this->transcodeJob->project_key}/{$this->transcodeJob->video_id}/{$quality}.mp4";
 
                 // Create output directory
-                $outputDir = storage_path("app/transcoded/{$this->job->project_key}/{$this->job->video_id}");
+                $outputDir = storage_path("app/transcoded/{$this->transcodeJob->project_key}/{$this->transcodeJob->video_id}");
                 if (!is_dir($outputDir)) {
                     mkdir($outputDir, 0755, true);
                 }
@@ -76,14 +76,14 @@ class TranscodeVideo implements ShouldQueue
                     ->save($outputPath);
 
                 $outputPaths[$quality] = $outputPath;
-                $downloadUrls[$quality] = url("/api/download/{$this->job->project_key}/{$this->job->video_id}/{$quality}");
+                $downloadUrls[$quality] = url("/api/download/{$this->transcodeJob->project_key}/{$this->transcodeJob->video_id}/{$quality}");
             }
 
             // Cleanup temp file
             Storage::disk('local')->delete($tempInput);
 
             // Update job status
-            $this->job->update([
+            $this->transcodeJob->update([
                 'status' => 'completed',
                 'output_paths' => $outputPaths,
                 'completed_at' => now(),
@@ -95,9 +95,9 @@ class TranscodeVideo implements ShouldQueue
             $this->sendWebhook($downloadUrls);
 
         } catch (\Exception $e) {
-            Log::error("Transcoding failed for {$this->job->getUniqueIdentifier()}: " . $e->getMessage());
+            Log::error("Transcoding failed for {$this->transcodeJob->getUniqueIdentifier()}: " . $e->getMessage());
             
-            $this->job->update(['status' => 'failed']);
+            $this->transcodeJob->update(['status' => 'failed']);
             
             $this->notifyFailure($e->getMessage());
             
@@ -136,20 +136,20 @@ class TranscodeVideo implements ShouldQueue
     {
         Http::timeout(60)
             ->retry(3, 1000)
-            ->post($this->job->callback_url, [
-                'project_key' => $this->job->project_key,
-                'video_id' => $this->job->video_id,
+            ->post($this->transcodeJob->callback_url, [
+                'project_key' => $this->transcodeJob->project_key,
+                'video_id' => $this->transcodeJob->video_id,
                 'status' => 'completed',
                 'download_urls' => $downloadUrls,
-                'qualities' => $this->job->qualities_requested,
+                'qualities' => $this->transcodeJob->qualities_requested,
             ]);
     }
 
     private function notifyFailure(string $error): void
     {
-        Http::timeout(30)->post($this->job->callback_url, [
-            'project_key' => $this->job->project_key,
-            'video_id' => $this->job->video_id,
+        Http::timeout(30)->post($this->transcodeJob->callback_url, [
+            'project_key' => $this->transcodeJob->project_key,
+            'video_id' => $this->transcodeJob->video_id,
             'status' => 'failed',
             'error' => $error,
         ]);
@@ -157,7 +157,7 @@ class TranscodeVideo implements ShouldQueue
 
     public function failed(\Throwable $exception): void
     {
-        $this->job->update(['status' => 'failed']);
+        $this->transcodeJob->update(['status' => 'failed']);
         $this->notifyFailure($exception->getMessage());
     }
 }
