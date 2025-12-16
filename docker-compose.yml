@@ -1,27 +1,30 @@
-version: '3.8'
+version: "3.8"
 
 services:
   transcoding_api:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     container_name: transcoding_api
     ports:
       - "26958:80"
+    environment:
+      APP_ENV: production
     volumes:
-      - .:/var/www/html
-      - transcoding_storage:/var/www/html/storage/app
+      # Persist only storage (uploads/transcodes/logs). Do NOT bind-mount the whole repo in production.
+      - transcoding_storage:/var/www/html/storage
     restart: unless-stopped
-    
+
   transcoding_queue:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: transcoding_queue
     command: sh -lc "php artisan queue:work --queue=transcoding --tries=1 --timeout=7200 --sleep=3"
+    environment:
+      APP_ENV: production
     volumes:
-      - .:/var/www/html
-      - transcoding_storage:/var/www/html/storage/app
+      - transcoding_storage:/var/www/html/storage
     restart: unless-stopped
     depends_on:
       - transcoding_api
