@@ -29,16 +29,16 @@ class CleanupTranscodedFiles extends Command
             // Delete all transcoded files
             if ($job->output_paths) {
                 foreach ($job->output_paths as $path) {
-                    if (Storage::disk('local')->exists($path)) {
-                        Storage::disk('local')->delete($path);
+                    if (Storage::disk('public')->exists($path)) {
+                        Storage::disk('public')->delete($path);
                     }
                 }
             }
             
             // Delete directory
             $directory = "transcoded/{$job->project_key}/{$job->video_id}";
-            if (Storage::disk('local')->exists($directory)) {
-                Storage::disk('local')->deleteDirectory($directory);
+            if (Storage::disk('public')->exists($directory)) {
+                Storage::disk('public')->deleteDirectory($directory);
             }
             
             // Delete job record

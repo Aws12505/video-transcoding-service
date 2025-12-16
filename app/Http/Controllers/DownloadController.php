@@ -32,7 +32,7 @@ class DownloadController extends Controller
             return response()->json(['error' => 'Quality not available'], 404);
         }
 
-        $filePath = storage_path("app/{$outputPaths[$quality]}");
+        $filePath = Storage::disk('public')->path($outputPaths[$quality]);
 
         if (!file_exists($filePath)) {
             return response()->json(['error' => 'File missing on server'], 404);

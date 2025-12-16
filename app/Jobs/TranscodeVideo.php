@@ -35,17 +35,17 @@ class TranscodeVideo implements ShouldQueue
         try {
             $uniqueId = $this->transcodeJob->getUniqueIdentifier();
             
-            // Download original - relative path for storage/app
+            // Download original - public disk
             $tempInput = "temp/{$uniqueId}_original.mp4";
             Log::info("Starting download for {$uniqueId}");
             $this->downloadVideo($tempInput);
             
             // Verify file exists
-            if (!Storage::disk('local')->exists($tempInput)) {
+            if (!Storage::disk('public')->exists($tempInput)) {
                 throw new \Exception("Downloaded file not found at: {$tempInput}");
             }
             
-            Log::info("File confirmed at: " . Storage::disk('local')->path($tempInput));
+            Log::info("File confirmed at: " . Storage::disk('public')->path($tempInput));
             
             // Get quality settings
             $qualitySettings = config('transcoding.quality_settings');
@@ -68,10 +68,10 @@ class TranscodeVideo implements ShouldQueue
                 $format->setKiloBitrate((int) rtrim($settings['bitrate'], 'k'));
                 $format->setAudioKiloBitrate(128);
 
-                FFMpeg::fromDisk('local')
+                FFMpeg::fromDisk('public')
                     ->open($tempInput)
                     ->export()
-                    ->toDisk('local')
+                    ->toDisk('public')
                     ->inFormat($format)
                     ->resize($settings['width'], $settings['height'])
                     ->save($outputPath);
@@ -83,7 +83,7 @@ class TranscodeVideo implements ShouldQueue
             }
 
             // Cleanup temp file
-            Storage::disk('local')->delete($tempInput);
+            Storage::disk('public')->delete($tempInput);
 
             // Update job status
             $this->transcodeJob->update([
@@ -132,7 +132,7 @@ class TranscodeVideo implements ShouldQueue
         
         // Rewind and put to storage
         rewind($tempFile);
-        Storage::disk('local')->put($outputPath, $tempFile);
+        Storage::disk('public')->put($outputPath, $tempFile);
         
         fclose($tempFile);
         
