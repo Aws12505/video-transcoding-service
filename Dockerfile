@@ -2,15 +2,15 @@ FROM php:8.4-apache
 
 # --- OS deps + ffmpeg ---
 RUN apt-get update && apt-get install -y \
-    git zip unzip \
+    git zip unzip curl \
     libpng-dev libjpeg-dev libfreetype6-dev libzip-dev libwebp-dev \
     build-essential \
     ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
 # --- PHP extensions ---
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp
-RUN docker-php-ext-install -j"$(nproc)" pdo pdo_mysql gd zip pcntl sockets
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+ && docker-php-ext-install -j"$(nproc)" pdo pdo_mysql gd zip pcntl sockets
 
 # --- Apache: Laravel needs /public as webroot + .htaccess ---
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
@@ -30,18 +30,18 @@ WORKDIR /var/www/html
 # --- Composer ---
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
-# --- App code ---
+# --- Copy only composer files first for better cache ---
+COPY composer.json composer.lock* /var/www/html/
+
+# Install vendor deps into the image (fast startup).
+# Your code is bind-mounted in dev, but vendor stays available in the image.
+RUN composer install --no-interaction --prefer-dist
+
+# --- Copy the rest (still useful for non-bind-mount runs) ---
 COPY . /var/www/html
 
-# IMPORTANT: in real production, you should COPY your real .env (not .env.example)
-# This keeps your previous behavior, but you should replace this later:
+# Create .env if missing (dev convenience)
 RUN if [ ! -f .env ]; then cp .env.example .env; fi
-
-# Install deps + Laravel prep
-RUN composer install --no-dev --optimize-autoloader \
- && php artisan key:generate --force \
- && php artisan config:cache \
- && php artisan route:cache || true
 
 # Permissions
 RUN mkdir -p storage bootstrap/cache \

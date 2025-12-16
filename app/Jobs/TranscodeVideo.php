@@ -22,7 +22,7 @@ class TranscodeVideo implements ShouldQueue
     public $tries = 1;
 
     public function __construct(
-        public TranscodeJob $transcodeJob,  // Changed from $job
+        public TranscodeJob $transcodeJob, 
         public string $videoUrl
     ) {
         $this->onQueue('transcoding');

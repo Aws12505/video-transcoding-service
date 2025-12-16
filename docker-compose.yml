@@ -9,7 +9,9 @@ services:
     ports:
       - "26958:80"
     volumes:
-      # Persist only storage (uploads/transcodes/logs). Do NOT bind-mount the whole repo in production.
+      # DEV: live code updates
+      - ./:/var/www/html
+      # Persist uploads/transcodes/logs
       - transcoding_storage:/var/www/html/storage
     restart: unless-stopped
 
@@ -20,6 +22,7 @@ services:
     container_name: transcoding_queue
     command: sh -lc "php artisan queue:work --queue=transcoding --tries=1 --timeout=7200 --sleep=3"
     volumes:
+      - ./:/var/www/html
       - transcoding_storage:/var/www/html/storage
     restart: unless-stopped
     depends_on:
